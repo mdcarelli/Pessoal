@@ -1,0 +1,49 @@
+// Fiocruz - Potenciostato portatil
+
+int pwmChannel = 0; // Selects channel 0
+int frequence = 1000; // PWM frequency of 1 KHz
+int resolution = 8; // 8-bit resolution, 256 possible values
+int pwmPin = 26;
+float voltage = 2300;
+
+// Potentiometer is connected to GPIO 34 (Analog ADC1_CH6)
+const int potPin1 = 34;
+const int potPin2 = 14;
+
+// variable for storing the potentiometer value
+float vWE = 0;
+float vRE = 0;
+
+
+void setup() {
+  Serial.begin(115200);
+
+  // Configuration of channel 0 with the chosen frequency and resolution
+  ledcSetup(pwmChannel, frequence, resolution);
+
+  // Assigns the PWM channel to pin
+  ledcAttachPin(pwmPin, pwmChannel);
+
+  // Create the selected output voltage
+  ledcWrite(pwmChannel, map(voltage, 0, 3300, 0, 255));
+
+
+
+}
+
+void loop() {
+
+  // Reading potentiometer value
+  vWE = analogRead(potPin1); //tensão do potenciometro
+  vRE = analogRead(potPin2); //
+
+  Serial.print("Voltage out (mV)/Voltage WE (mV)/Voltage RE (V): ");
+  Serial.print(voltage);
+  Serial.print("/");
+  Serial.print(map(vWE, 0, 4095, 0, 3300));
+  Serial.print("/");
+  Serial.println(map(vRE, 0, 4095, 0, 3300));
+  delay(1000);
+
+
+}
