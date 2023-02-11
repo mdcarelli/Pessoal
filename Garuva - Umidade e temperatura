@@ -1,0 +1,66 @@
+// Garuva - Umidade e temperatura
+
+#include <DHT.h> //Carrega a biblioteca DHT
+#define DHTPIN A5 //Define a ligação ao pino de dados do sensor
+#define DHTTYPE DHT11 //Define o tipo de sensor DHT utilizado
+
+DHT dht(DHTPIN, DHTTYPE);
+
+int t_h = 0;
+int t_t = 0;
+
+void setup()
+{
+  Serial.begin(9600); //Inicializa a serial
+  dht.begin();
+  pinMode(9, OUTPUT);
+  pinMode(8, OUTPUT);
+}
+
+void loop()
+{
+  float h = dht.readHumidity(); //Le o valor da umidade
+  float t = dht.readTemperature(); //Le o valor da temperatura
+  Serial.print("Umid.(%): "); // Mostra os dados na porta serial
+  Serial.print(h);
+  Serial.print(" | ");
+  Serial.print("Temp.(°C): ");
+  Serial.println(t);
+
+  if (h >= 95) { // Teste lógico para umidade
+    t_h = 1000;
+  };
+  if (h >= 85 and h < 95) {
+    t_h = 200;
+  };
+  if (h < 85) {
+    t_h = 100;
+  };
+
+  // Teste lógico para temperatura
+  if (t >= 12 and t <= 18) {
+    t_t = 1000;
+  };
+  if ((t >= 8 and t < 12) or (t > 18 and t <= 22)) {
+    t_t = 200;
+  };
+  if (t<8 or t>22) {
+    t_t = 100;
+  };
+
+  for (int i = 0; i <= 1000 / t_h; i++) {
+    digitalWrite(9, HIGH);
+    delay(t_h);
+    digitalWrite(9, LOW);
+    delay(t_h);
+  }
+  for (int i = 0; i <= 1000 / t_t; i++) {
+    digitalWrite(8, HIGH);
+    delay(t_t);
+    digitalWrite(8, LOW);
+    delay(t_t);
+  }
+
+  //Intervalo recomendado para leitura do sensor
+  delay(2000);
+}
