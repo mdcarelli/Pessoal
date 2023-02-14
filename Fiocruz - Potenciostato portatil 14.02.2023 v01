@@ -1,0 +1,120 @@
+// Fiocruz - Potenciostato portatil
+
+int pwmChannel = 0; // Selects channel 0
+int frequence = 1000; // PWM frequency of 1 KHz
+int resolution = 8; // 8-bit resolution, 256 possible values
+int pwmPin = 26;
+float voltage = 2300;
+int buzzer = 27;
+
+// Potentiometer is connected to GPIO 34 (Analog ADC1_CH6)
+const int potPin1 = 34;
+const int potPin2 = 14;
+
+
+const int hbridge = 33; // h bridge control
+
+// variable for storing the potentiometer value
+float vWE = 0;
+float vRE = 0;
+
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(buzzer,OUTPUT);
+  pinMode(22,OUTPUT); 
+    pinMode(23,OUTPUT);
+
+  for (int i = 0; i < 4; i++) {
+digitalWrite(buzzer,HIGH);
+delay(400);
+digitalWrite(buzzer,LOW);
+delay(400);
+  }
+
+  // Configuration of channel 0 with the chosen frequency and resolution
+  ledcSetup(pwmChannel, frequence, resolution);
+
+  // Assigns the PWM channel to pin
+  ledcAttachPin(pwmPin, pwmChannel);
+
+  // Create the selected output voltage
+  ledcWrite(pwmChannel, map(voltage, 0, 3300, 0, 255));
+
+
+
+  digitalWrite(22,LOW);
+  digitalWrite(23,HIGH);
+  
+  ledcSetup(1, 490, 8);
+    ledcAttachPin(hbridge, 1);
+ledcWrite(1, 0);
+
+  /* for (int j = 250; j = 0; j=j-10){ 
+  ledcWrite(hbridge, j);
+   digitalWrite(buzzer,HIGH);
+delay(400);
+digitalWrite(buzzer,LOW);
+    delay(2000); //intervalo para incrementar a variavel i
+  }
+
+*/ 
+
+
+
+
+for (float j = 0; j < 250; j++) {
+
+ledcWrite(1, j);
+digitalWrite(buzzer,HIGH);
+delay(200);
+digitalWrite(buzzer,LOW);
+ Serial.println(j);
+  vWE = analogRead(potPin1); //tensão do potenciometro
+  vRE = analogRead(potPin2);
+   Serial.print("PWM output/Voltage out (mV)/Voltage WE (mV)/Voltage RE (V): ");
+   Serial.print(j);
+     Serial.print("/");
+  Serial.print(voltage);
+  Serial.print("/");
+  Serial.print(vWE);
+  Serial.print("/");
+  Serial.println(vRE);
+  
+delay (5000);
+  }
+
+
+
+  digitalWrite(22,HIGH);
+  digitalWrite(23,LOW);
+
+for (float j = 0; j < 250; j++) {
+
+ledcWrite(1, j);
+digitalWrite(buzzer,HIGH);
+delay(200);
+digitalWrite(buzzer,LOW);
+ Serial.println(j);
+delay (5000);
+  }
+
+
+}
+
+void loop() {
+
+  // Reading potentiometer value
+  vWE = analogRead(potPin1); //tensão do potenciometro
+  vRE = analogRead(potPin2); //
+
+  Serial.print("Voltage out (mV)/Voltage WE (mV)/Voltage RE (V): ");
+  Serial.print(voltage);
+  Serial.print("/");
+  Serial.print(map(vWE, 0, 4095, 0, 3300));
+  Serial.print("/");
+  Serial.println(map(vRE, 0, 4095, 0, 3300));
+  delay(1000);
+
+
+}
