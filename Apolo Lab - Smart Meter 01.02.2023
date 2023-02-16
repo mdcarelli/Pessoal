@@ -1,0 +1,407 @@
+// Apolo Lab - Smart Meter 01.02.2023
+
+#include "FS.h"
+#include "SD.h"
+#include "SPI.h"
+SPIClass spiSD(HSPI);
+#include <Arduino.h>
+#include <HTTPClient.h>
+#include <DNSServer.h>
+#include <WebServer.h>
+#include <WiFiManager.h>
+
+#define SD_CS 5
+
+#include <EmonLib.h>
+
+#define ADC_INPUT 32
+#define ADC_INPUT 33
+#define ADC_INPUT 34
+#define ADC_INPUT 35
+#define ADC_INPUT 36
+#define ADC_INPUT 39
+#define led 13
+
+#define VOLT_CAL 126
+  
+  EnergyMonitor SCT0132;
+  EnergyMonitor SCT0133;
+  EnergyMonitor SCT0134;
+  EnergyMonitor SCT0135;
+  EnergyMonitor SCT0136;
+  EnergyMonitor SCT0139;
+
+  int pinSensor1 = 33;
+  int pinSensor2 = 32;
+  int pinSensor3 = 35;
+  int pinSensor4 = 34;
+  int pinSensor5 = 39;
+  int pinSensor6 = 36;
+
+EnergyMonitor emon1;
+EnergyMonitor emon2;
+EnergyMonitor emon3;
+EnergyMonitor emon4;
+EnergyMonitor emon5;
+EnergyMonitor emon6;
+
+int tensao = 127;
+int pot = 0;
+int pot_tot = 0;
+int i = 0;
+
+File myFile;
+
+
+/* FUNÇÕES WIFI */
+WiFiManager wifiManager;
+
+void configModeCallback (WiFiManager *myWiFiManager) {
+  Serial.println("Entrando no mode de configuração...");
+  Serial.println(WiFi.softAPIP());
+  Serial.println(myWiFiManager->getConfigPortalSSID());  
+}
+/* FIM FUNÇÕES WIFI */
+
+
+
+
+// Save reading number on RTC memory
+RTC_DATA_ATTR int readingID = 0;
+
+String dataMessage;
+String dataMessage_2;
+String dataMessage_3;
+String dataMessage_4;
+String dataMessage_5;
+
+// Variables to save date and time
+String formattedDate;
+String dayStamp;
+String timeStamp;
+
+
+// Write to the SD card (DON'T MODIFY THIS FUNCTION)
+void writeFile(fs::FS &fs, const char * path, const char * message) {
+  Serial.printf("Writing file: %s\n", path);
+
+  File file = fs.open(path, FILE_WRITE);
+  if(!file) {
+    Serial.println("Failed to open file for writing");
+    return;
+  }
+  if(file.print(message)) {
+    Serial.println("File written");
+  } else {
+    Serial.println("Write failed");
+  }
+  file.close();
+}
+
+// Append data to the SD card (DON'T MODIFY THIS FUNCTION)
+void appendFile(fs::FS &fs, const char * path, const char * message) {
+  Serial.printf("Appending to file: %s\n", path);
+
+  File file = fs.open(path, FILE_APPEND);
+  if(!file) {
+    Serial.println("Failed to open file for appending");
+    return;
+  }
+  if(file.print(message)) {
+    Serial.println("Message appended");
+  } else {
+    Serial.println("Append failed");
+  }
+  file.close();
+}
+
+
+
+ 
+void setup(){
+  Serial.begin(9600);
+
+  // verifica se o cartão SD está presente e se pode ser inicializado
+  spiSD.begin(18, 19, 23, 5); //SCK,MISO,MOSI,SS //HSPI1'
+  
+  //se chegou aqui é porque o cartão foi inicializado corretamente  
+  Serial.println("Cartão inicializado.");
+
+  
+  pinMode(led, OUTPUT);
+  //Cur Const= Ratio/BurdenR. 2000/33 = 60
+  emon1.current(pinSensor1, 15.2);
+  emon2.current(pinSensor2, 15.2);
+  emon3.current(pinSensor3, 15.2);
+  emon4.voltage(pinSensor4, VOLT_CAL, 1.7);
+  emon5.voltage(pinSensor5, VOLT_CAL, 1.7);
+  emon6.voltage(pinSensor6, VOLT_CAL, 1.7);
+
+    /* CONEXÃO WIFI */
+      wifiManager.setWiFiAutoReconnect(true);
+    wifiManager.setAPCallback(configModeCallback);
+    if (!wifiManager.autoConnect("APOLO SMART METER", "12345678")) {
+      Serial.println("Falha ao conectar...");
+      ESP.restart();
+    }
+    Serial.println("Conectado...");
+    
+  /* FIM CONEXÃO WIFI */
+}
+
+/* CÓDIGO DO DISPOSITIVO REGISTRADO NO SISTEMA */
+String apiKeyValue = "AE00008";
+
+int x = 0;
+int k[6];
+
+
+unsigned long previousMillis = 0;
+unsigned long interval = 30000;
+ 
+void loop()
+{
+  
+  if(WiFi.status() == WL_CONNECTED)
+  {     
+      digitalWrite(led,HIGH);
+      /* ENVIA DADOS SENSOR 1 */
+        HTTPClient http1;
+        http1.begin("https://sistema.apolosmartmeter.com.br/API/GravarDados/");
+        http1.addHeader("Content-Type", "application/x-www-form-urlencoded");
+
+        emon4.calcVI(17,2000);
+        emon5.calcVI(17,2000);
+        emon6.calcVI(17,2000);
+
+        double irms = emon1.calcIrms(1480);
+        double irms2 = emon2.calcIrms(1480);
+        double irms3 = emon3.calcIrms(1480);
+        float irms4 = emon4.Vrms;
+        float irms5 = emon5.Vrms;
+        float irms6 = emon6.Vrms;
+
+        if (x == 10)
+    {
+      Serial.println("BACKUP - START");
+      int z = 0;
+      myFile = SD.open("/data.txt");
+      if (myFile) {
+      Serial.println("/data.txt:");
+      // read from the file until there's nothing else in it:
+      while (myFile.available()) 
+      {
+        k[z] = myFile.parseInt();        
+        z++;          
+
+        if (z == 5)
+        {
+          String medidor = "1";
+          String potencia = "0";
+            //String httpRequestData1;
+            //int httpResponseCode1;
+
+            Serial.print("k[]= ");
+            Serial.print(k[0]);
+            Serial.print(" ");
+            Serial.print(k[1]);
+            Serial.print(" ");
+            Serial.print(k[2]);
+            Serial.print(" ");
+            Serial.print(k[3]);
+            Serial.print(" ");
+            Serial.print(k[4]);
+            Serial.print(" ");
+            Serial.println(k[5]);
+            
+          String httpRequestData1 = "corrente=" + String(k[0]) + "&corrente2=" + String(k[1]) + "&corrente3=" + String(k[2]) + "&tensao=" + String(k[3]) + "&tensao2=" + String(k[4]) + "&tensao3=" + String(k[5]) + "&potencia=" + String(pot_tot) + "&medidor=" + medidor + "&chave=" + apiKeyValue;
+          Serial.println(httpRequestData1);
+            int httpResponseCode1 = http1.POST(httpRequestData1);
+      
+            if (httpResponseCode1 > 0) {
+              String response2 = http1.getString();
+              Serial.println(response2);
+              
+            } else {
+              Serial.print("Error on sending POST: ");
+              Serial.println();
+            }
+
+        http1.end();
+        
+          for (int a = 0; a < 5; a = a + 1) 
+          {
+            k[a]=0;
+            Serial.print("Limpando: ");
+            z = 0;
+          }
+        }
+        
+      }
+      // close the file:
+
+      
+      
+      myFile.close();
+      } else {
+      // if the file didn't open, print an error:
+      Serial.println("error opening data.txt");
+      }
+
+      x = 1;
+    }         
+         
+        Serial.print("Corrente1: ");
+        Serial.print(irms); 
+        Serial.println("A");
+        delay(500);
+        Serial.print("Corrente2: ");
+        Serial.print(irms2); 
+        Serial.println("A");
+        delay(500);
+        Serial.print("Corrente3: ");
+        Serial.print(irms3); 
+        Serial.println("A");
+        delay(500);
+        Serial.print("Tensao1: ");
+        Serial.print(irms4); 
+        Serial.println("A");
+        delay(500);
+        Serial.print("Tensao2: ");
+        Serial.print(irms5); 
+        Serial.println("A");
+        delay(500);
+        Serial.print("Tensao3: ");
+        Serial.print(irms6); 
+        Serial.println("A");
+        delay(500);
+      
+        i++;
+
+        String medidor = "1";
+        String potencia = "0";
+        String httpRequestData1;
+        int httpResponseCode1;
+
+            if(i>=6)
+            {
+              //String potencia = pot_tot;
+              String httpRequestData1 = "corrente="+ String(irms) + "&corrente2="+ String(irms2) + "&corrente3="+ String(irms3) + "&tensao="+ String(irms4) + "&tensao2="+ String(irms5) + "&tensao3="+ String(irms6) + "&potencia=" + String(pot_tot) + "&medidor=" + medidor + "&chave=" + apiKeyValue;
+              Serial.println(httpRequestData1);
+              int httpResponseCode1 = http1.POST(httpRequestData1);
+            
+            
+              if(httpResponseCode1 > 0){
+                String response2 = http1.getString();
+                Serial.println(response2);
+              }else{
+                Serial.print("Error on sending POST: ");
+                Serial.println();
+              }
+            
+             http1.end();
+            }
+
+                                     
+    }else{
+      digitalWrite(led,LOW);
+    }
+
+  unsigned long currentMillis = millis();
+  // if WiFi is down, try reconnecting every CHECK_WIFI_TIME seconds
+  if ((WiFi.status() != WL_CONNECTED) && (currentMillis - previousMillis >= interval))
+  {
+
+    double irms = emon1.calcIrms(1480);
+    double irms2 = emon2.calcIrms(1480);
+    double irms3 = emon3.calcIrms(1480);
+    double irms4 = emon4.calcIrms(1480);
+    double irms5 = emon5.calcIrms(1480);
+    double irms6 = emon6.calcIrms(1480);
+
+    Serial.print("Corrente1: ");
+    Serial.print(irms);
+    Serial.println("A");
+    delay(50);
+    Serial.print("Corrente2: ");
+    Serial.print(irms2);
+    Serial.println("A");
+    delay(50);
+    Serial.print("Corrente3: ");
+    Serial.print(irms3);
+    Serial.println("A");
+    delay(50);
+    Serial.print("Tensao1: ");
+    Serial.print(irms4);
+    Serial.println("A");
+    delay(50);
+    Serial.print("Tensao2: ");
+    Serial.print(irms5);
+    Serial.println("A");
+    delay(50);
+    Serial.print("Tensao3: ");
+    Serial.print(irms6);
+    Serial.println("A");
+    delay(50);
+    i++;
+
+    String medidor = "1";
+    String potencia = "0";
+        
+    Serial.print(millis());
+    Serial.println("Reconnecting to WiFi...");
+    WiFi.disconnect();
+    WiFi.reconnect();
+    previousMillis = currentMillis;
+    
+//////// ----  SD CARD ----
+    if (!SD.begin( SD_CS, spiSD )) 
+    {
+      Serial.println("Card Mount Failed");
+      return;
+    }
+    uint8_t cardType = SD.cardType();
+    if(cardType == CARD_NONE) 
+    {
+      Serial.println("No SD card attached");
+      return;
+    }
+    Serial.println("Initializing SD card...");
+    if (!SD.begin(SD_CS)) {
+      Serial.println("ERROR - SD card initialization failed!");
+      return;    // init failed
+    }
+  
+    File file = SD.open("/data.txt");
+    if(!file) {
+      Serial.println("File doens't exist");
+      Serial.println("Creating file...");
+    }
+    else 
+    {
+      String dataMessage1 = String(irms)+"\r\n";
+      String dataMessage2 = String(irms2)+"\r\n";
+      String dataMessage3 = String(irms3)+"\r\n";
+      String dataMessage4 = String(irms4)+"\r\n";
+      String dataMessage5 = String(irms5)+"\r\n";
+      String dataMessage6 = String(irms6)+"\r\n";
+            
+      //Serial.print("Save data: ");
+      //Serial.println(dataMessage);
+      appendFile(SD, "/data.txt", dataMessage1.c_str());
+      appendFile(SD, "/data.txt", dataMessage2.c_str());
+      appendFile(SD, "/data.txt", dataMessage3.c_str());
+      appendFile(SD, "/data.txt", dataMessage4.c_str());
+      appendFile(SD, "/data.txt", dataMessage5.c_str());
+      appendFile(SD, "/data.txt", dataMessage6.c_str());
+      delay(500);
+    }
+    file.close();
+
+    x = 10;
+    
+  }
+  
+    delay(5000);
+
+}
