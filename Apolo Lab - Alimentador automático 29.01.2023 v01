@@ -1,4 +1,4 @@
-//Apolo - Alimentador automático
+// Apolo Lab - Alimentador automático
 
 #include <Servo.h> // servo library
 #define SERVO 6 // digital input 6 PWM
