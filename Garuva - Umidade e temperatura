@@ -61,6 +61,4 @@ void loop()
     delay(t_t);
   }
 
-  //Intervalo recomendado para leitura do sensor
-  delay(2000);
 }
