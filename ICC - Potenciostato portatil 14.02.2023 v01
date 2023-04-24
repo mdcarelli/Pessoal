@@ -5,17 +5,19 @@ int frequence = 1000; // PWM frequency of 1 KHz
 int resolution = 8; // 8-bit resolution, 256 possible values
 int pwmPin = 26;
 float voltage = 2300;
-int buzzer = 4;
+int buzzer = 27;
+int readpin = 34;
 
 // Potentiometer is connected to GPIO 34 (Analog ADC1_CH6)
 const int potPin1 = 34;
 const int potPin2 = 14;
 
 /* Definição do canal DAC0 (GPIO 25) */
-#define CANAL_DAC0 25 
- 
+#define CANAL_DAC0 25
+
 /* Definição do canal DAC1 (GPIO 26) */
-#define CANAL_DAC1 26 
+#define CANAL_DAC1 26
+
 
 
 // const int hbridge = 33; // h bridge control
@@ -27,15 +29,15 @@ float vRE = 0;
 
 void setup() {
   Serial.begin(115200);
-  pinMode(buzzer,OUTPUT);
-  pinMode(22,OUTPUT); 
-    pinMode(23,OUTPUT);
+  pinMode(buzzer, OUTPUT);
+  pinMode(22, OUTPUT);
+  pinMode(23, OUTPUT);
 
   for (int i = 0; i < 4; i++) {
-digitalWrite(buzzer,HIGH);
-delay(400);
-digitalWrite(buzzer,LOW);
-delay(400);
+    digitalWrite(buzzer, HIGH);
+    delay(400);
+    digitalWrite(buzzer, LOW);
+    delay(400);
   }
 
   // Configuration of channel 0 with the chosen frequency and resolution
@@ -47,87 +49,43 @@ delay(400);
   // Create the selected output voltage
   ledcWrite(pwmChannel, map(voltage, 0, 3300, 0, 255)); // map(valor, deMenor, deMaior, paraMenor, paraMaior);
 
+  dacWrite(CANAL_DAC0, 255);
+  dacWrite(CANAL_DAC1, 0); 
 
- dacWrite(CANAL_DAC0, 255);
-  dacWrite(CANAL_DAC1, 255);
-
-Serial.println("DAC write;DAC voltage (mV);ADC read;ADC voltage (mV);R voltage (mV)");
-for (float j = 160; j <= 255; j++) {
-dacWrite(CANAL_DAC0, j);
-digitalWrite(buzzer,HIGH);
-delay(200);
-digitalWrite(buzzer,LOW);
-
-  voltage = analogRead(34); //tensão ADC
+// DAC0 pin 25: 255 - 3,14v | 0 - 0,091v (medidos em multimetro)
 
   
-   Serial.print(j);
-     Serial.print(";");
-        Serial.print(map(j, 0, 255, 0, 3300));
-     Serial.print(";");
-  Serial.print(voltage);
-  Serial.print(";");
-  Serial.print(map(voltage, 0, 4095, 0, 3300));
-  Serial.print(";");
-  Serial.println(map(analogRead(35), 0, 4095, 0, 3300));
   
-delay (1000);
-  }
+  Serial.println("DAC write;DAC voltage (mV);ADC read;ADC voltage (mV);R voltage (mV)");
+  for (float j = 0; j <= 255; j=j+5) {
+    dacWrite(CANAL_DAC0, j);
+    digitalWrite(buzzer, HIGH);
+    delay(200);
+    digitalWrite(buzzer, LOW);
 
+    voltage = analogRead(readpin); //tensão ADC
 
-/*
-for (float j = 0; j < 250; j++) {
+    Serial.print(j);
+    Serial.print(";");
+    Serial.print(map(j, 0, 255, 0, 3300));
+    Serial.print(";");
+    Serial.print(voltage);
+    Serial.print(";");
+    Serial.print(map(voltage, 0, 4095, 0, 3300));
+    Serial.print(";");
+    Serial.println(map(analogRead(35), 0, 4095, 0, 3300));
 
-ledcWrite(1, j);
-digitalWrite(buzzer,HIGH);
-delay(200);
-digitalWrite(buzzer,LOW);
- Serial.println(j);
-  vWE = analogRead(potPin1); //tensão do potenciometro
-  vRE = analogRead(potPin2);
-   Serial.print("PWM output/Voltage out (mV)/Voltage WE (mV)/Voltage RE (V): ");
-   Serial.print(j);
-     Serial.print("/");
-  Serial.print(voltage);
-  Serial.print("/");
-  Serial.print(vWE);
-  Serial.print("/");
-  Serial.println(vRE);
-  
-delay (5000);
+    delay (1000);
   }
 
 
 
-  digitalWrite(22,HIGH);
-  digitalWrite(23,LOW);
-
-for (float j = 0; j < 250; j++) {
-
-ledcWrite(1, j);
-digitalWrite(buzzer,HIGH);
-delay(200);
-digitalWrite(buzzer,LOW);
- Serial.println(j);
-delay (5000);
-  }
-*/
 
 }
 
 void loop() {
-/*
-  // Reading potentiometer value
-  vWE = analogRead(potPin1); //tensão do potenciometro
-  vRE = analogRead(potPin2); //
 
-  Serial.print("Voltage out (mV)/Voltage WE (mV)/Voltage RE (V): ");
-  Serial.print(voltage);
-  Serial.print("/");
-  Serial.print(map(vWE, 0, 4095, 0, 3300));
-  Serial.print("/");
-  Serial.println(map(vRE, 0, 4095, 0, 3300));
-  delay(1000);
 
-*/
+
+
 }
