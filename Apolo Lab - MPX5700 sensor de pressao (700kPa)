@@ -1,0 +1,40 @@
+//Apolo Lab - MPX5700 sensor de pressao (700kPa)
+
+int rawValue; // A/D readings
+int offset = 180; // zero pressure adjust
+int fullScale = 9630; // max pressure (span) adjust
+float pressure; // final pressure
+#include <LiquidCrystal.h>
+const int rs = 12, en = 11, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
+LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
+
+void setup() {
+  Serial.begin(9600);
+  lcd.begin(16, 2);
+  Serial.println("Calibrando...");
+  lcd.setCursor(0, 0);
+  lcd.print("Calibrando...");
+  delay(2000);
+  for (int x = 0; x < 10; x++) rawValue = rawValue + analogRead(A0);
+  offset = rawValue;
+}
+
+void loop() {
+  rawValue = 0;
+  for (int x = 0; x < 10; x++) rawValue = rawValue + analogRead(A0);
+  pressure = (rawValue - offset) * 700.0 / (fullScale - offset); // pressure conversion
+  pressure = 10 * pressure; // mbar
+  Serial.print("Raw A/D:");
+  Serial.print(rawValue);
+  Serial.print(" | P (mbar): ");
+  Serial.print(pressure, 1); // one decimal places
+  Serial.println(" mbar");
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Raw A/D:");
+  lcd.print(rawValue);
+  lcd.setCursor(0, 1);
+  lcd.print("P (mbar): ");
+  lcd.print(pressure);
+  delay(1000);
+}
