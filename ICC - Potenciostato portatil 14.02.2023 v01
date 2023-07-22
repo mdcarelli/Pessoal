@@ -1,91 +1,72 @@
 // ICC - Potenciostato portatil
 
-int pwmChannel = 0; // Selects channel 0
-int frequence = 1000; // PWM frequency of 1 KHz
-int resolution = 8; // 8-bit resolution, 256 possible values
-int pwmPin = 26;
-float voltage = 2300;
-int buzzer = 27;
+float input = 0;
+int light_alarm = 32;
+int sound_alarm = 33;
 int readpin = 34;
+int c_max = 255;
+int c_min = 0;
 
-// Potentiometer is connected to GPIO 34 (Analog ADC1_CH6)
-const int potPin1 = 34;
-const int potPin2 = 14;
-
-/* Definição do canal DAC0 (GPIO 25) */
-#define CANAL_DAC0 25
-
-/* Definição do canal DAC1 (GPIO 26) */
-#define CANAL_DAC1 26
-
-
-
-// const int hbridge = 33; // h bridge control
-
-// variable for storing the potentiometer value
-float vWE = 0;
-float vRE = 0;
-
+#define CANAL_DAC0 25 //Definição do canal DAC0 (GPIO 25) output
+#define CANAL_DAC1 26 //Definição do canal DAC1 (GPIO 26) input
 
 void setup() {
   Serial.begin(115200);
-  pinMode(buzzer, OUTPUT);
-  pinMode(22, OUTPUT);
-  pinMode(23, OUTPUT);
+  pinMode(light_alarm, OUTPUT);
+  pinMode(sound_alarm, OUTPUT);
 
   for (int i = 0; i < 4; i++) {
-    digitalWrite(buzzer, HIGH);
-    delay(400);
-    digitalWrite(buzzer, LOW);
-    delay(400);
+    digitalWrite(light_alarm, HIGH);
+    digitalWrite(sound_alarm, HIGH);
+    delay(200);
+    digitalWrite(light_alarm, LOW);
+    digitalWrite(sound_alarm, LOW);
+    delay(200);
   }
 
-  // Configuration of channel 0 with the chosen frequency and resolution
-  ledcSetup(pwmChannel, frequence, resolution);
+  Serial.println("Calibrando...");
+  digitalWrite(light_alarm, HIGH);
+  dacWrite(CANAL_DAC0, c_max);
+  dacWrite(CANAL_DAC1, 0);
+  delay(4600);
+  digitalWrite(light_alarm, LOW);
+  delay(400);
 
-  // Assigns the PWM channel to pin
-  ledcAttachPin(pwmPin, pwmChannel);
-
-  // Create the selected output voltage
-  ledcWrite(pwmChannel, map(voltage, 0, 3300, 0, 255)); // map(valor, deMenor, deMaior, paraMenor, paraMaior);
-
-  dacWrite(CANAL_DAC0, 255);
-  dacWrite(CANAL_DAC1, 0); 
-
-// DAC0 pin 25: 255 - 3,14v | 0 - 0,091v (medidos em multimetro)
-
-  
-  
-  Serial.println("DAC write;DAC voltage (mV);ADC read;ADC voltage (mV);R voltage (mV)");
-  for (float j = 0; j <= 255; j=j+5) {
+  Serial.println("DAC write;DAC voltage (mV);ADC read;ADC voltage (mV)");
+  for (float j = c_max; j >= c_min; j = j - 1) {
     dacWrite(CANAL_DAC0, j);
-    digitalWrite(buzzer, HIGH);
+    digitalWrite(light_alarm, HIGH);
     delay(200);
-    digitalWrite(buzzer, LOW);
-
-    voltage = analogRead(readpin); //tensão ADC
-
+    digitalWrite(light_alarm, LOW);
+    input = analogRead(readpin); //tensão ADC
     Serial.print(j);
     Serial.print(";");
     Serial.print(map(j, 0, 255, 0, 3300));
     Serial.print(";");
-    Serial.print(voltage);
+    Serial.print(input);
     Serial.print(";");
-    Serial.print(map(voltage, 0, 4095, 0, 3300));
-    Serial.print(";");
-    Serial.println(map(analogRead(35), 0, 4095, 0, 3300));
-
-    delay (1000);
+    Serial.println(map(input, 0, 4095, 0, 3300));
+    delay (5000);
   }
 
-
-
+  for (float j = c_min; j <= c_max; j = j + 1) {
+    dacWrite(CANAL_DAC0, j);
+    digitalWrite(light_alarm, HIGH);
+    delay(200);
+    digitalWrite(light_alarm, LOW);
+    input = analogRead(readpin); //tensão ADC
+    Serial.print(j);
+    Serial.print(";");
+    Serial.print(map(j, 0, 255, 0, 3300));
+    Serial.print(";");
+    Serial.print(input);
+    Serial.print(";");
+    Serial.println(map(input, 0, 4095, 0, 3300));
+    delay (1000);
+  }
 
 }
 
 void loop() {
-
-
-
 
 }
