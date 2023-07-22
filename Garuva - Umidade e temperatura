@@ -1,64 +1,123 @@
 // Garuva - Umidade e temperatura
 
+#include <LiquidCrystal.h> //Carrega a biblioteca LCD
 #include <DHT.h> //Carrega a biblioteca DHT
 #define DHTPIN A5 //Define a ligação ao pino de dados do sensor
 #define DHTTYPE DHT11 //Define o tipo de sensor DHT utilizado
-
 DHT dht(DHTPIN, DHTTYPE);
-
-int t_h = 0;
-int t_t = 0;
+LiquidCrystal lcd(12, 11, 5, 4, 3, 2); //Define os pinos que serão ligados ao LCD
+int t_h = 0; // Variável umidade
+int t_t = 0; // Variável temperatura
+int timer = 0; // Contador em segundos
+//Array simbolo grau
+byte grau[8] = { B00001100,
+                 B00010010,
+                 B00010010,
+                 B00001100,
+                 B00000000,
+                 B00000000,
+                 B00000000,
+                 B00000000,
+               };
 
 void setup()
 {
-  Serial.begin(9600); //Inicializa a serial
+  Serial.begin(9600); //Inicialização da porta serial
+  lcd.begin(16, 2); //Inicialização do LCD
+  lcd.clear(); //Limpeza do LCD
+  lcd.createChar(0, grau); //Criação o caractere customizado com o simbolo do grau
   dht.begin();
-  pinMode(9, OUTPUT);
-  pinMode(8, OUTPUT);
+  pinMode(9, OUTPUT); // Acionamento do LED da umidade
+  pinMode(8, OUTPUT); // Acionamento do LED da temperatura
+  pinMode(7, OUTPUT); // Acionamento do relé do nebulizador
+  Serial.println("Garuva - Umidade e temperatura");
+  delay(2000);
+  Serial.println("Temp.(C);Umid.(%);Cont.(s)");
 }
 
 void loop()
 {
-  float h = dht.readHumidity(); //Le o valor da umidade
-  float t = dht.readTemperature(); //Le o valor da temperatura
-  Serial.print("Umid.(%): "); // Mostra os dados na porta serial
-  Serial.print(h);
-  Serial.print(" | ");
-  Serial.print("Temp.(°C): ");
-  Serial.println(t);
+  float h = dht.readHumidity(); //Leitura da umidade
+  float t = dht.readTemperature(); //Leitura da temperatura
 
-  if (h >= 95) { // Teste lógico para umidade
+  // Exibição dos dados no LCD
+  lcd.setCursor(0, 0);
+  lcd.print("Temp.(C): ");
+  lcd.print(" ");
+  lcd.setCursor(10, 0);
+  lcd.print(t, 1);
+  lcd.setCursor(0, 1);
+  lcd.print("Umid.(%): ");
+  lcd.print(" ");
+  lcd.setCursor(10, 1);
+  lcd.print(h, 1);
+
+  // Exibição dos dados na porta serial
+  Serial.print(t);
+  Serial.print(";");
+  Serial.print(h);
+  Serial.print(";");
+  Serial.println(timer);
+
+  // Teste lógico para umidade
+  if (h >= 95) {
     t_h = 1000;
-  };
+  }
   if (h >= 85 and h < 95) {
     t_h = 200;
-  };
+  }
   if (h < 85) {
     t_h = 100;
-  };
+  }
 
   // Teste lógico para temperatura
   if (t >= 12 and t <= 18) {
     t_t = 1000;
-  };
+  }
   if ((t >= 8 and t < 12) or (t > 18 and t <= 22)) {
     t_t = 200;
-  };
+  }
   if (t<8 or t>22) {
     t_t = 100;
-  };
+  }
 
+  // Desligamento do nebulizador ultrassônico
+  if (timer == 4) {
+    digitalWrite(7, HIGH);
+    delay(400);
+    digitalWrite(7, LOW);
+    delay(400);
+    digitalWrite(7, HIGH);
+    delay(400);
+    digitalWrite(7, LOW);
+  }
+
+  // Acionamento do nebulizador ultrassônico no modo contínuo
+  if (h < 95 and timer == 0) {
+    digitalWrite(7, HIGH);
+    delay(400);
+    digitalWrite(7, LOW);
+    timer = 3600 * 2;
+  }
+
+  // Indicador da temperatura por LED
   for (int i = 0; i <= 1000 / t_h; i++) {
     digitalWrite(9, HIGH);
     delay(t_h);
     digitalWrite(9, LOW);
     delay(t_h);
   }
+  // Indicador da umidade por LED
   for (int i = 0; i <= 1000 / t_t; i++) {
     digitalWrite(8, HIGH);
     delay(t_t);
     digitalWrite(8, LOW);
     delay(t_t);
+  }
+  
+  // Subtração do contador
+  if (timer > 0) {
+    timer = timer - 4;
   }
 
 }
