@@ -93,11 +93,11 @@ void loop()
   }
 
   // Acionamento do nebulizador ultrassônico no modo contínuo
-  if (h < 95 and timer == 0) {
+  if (h < 100 and timer == 0) {
     digitalWrite(7, HIGH);
     delay(400);
     digitalWrite(7, LOW);
-    timer = 3600 * 2;
+    timer = 3600;
   }
 
   // Indicador da temperatura por LED
