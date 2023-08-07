@@ -4,8 +4,9 @@ float input = 0;
 int light_alarm = 32;
 int sound_alarm = 33;
 int readpin = 34;
-int c_max = 255;
-int c_min = 0;
+int c_max = 181;
+int c_min = 54;
+int cycle = 0;
 
 #define CANAL_DAC0 25 //Definição do canal DAC0 (GPIO 25) output
 #define CANAL_DAC1 26 //Definição do canal DAC1 (GPIO 26) input
@@ -32,41 +33,75 @@ void setup() {
   digitalWrite(light_alarm, LOW);
   delay(400);
 
-  Serial.println("DAC write;DAC voltage (mV);ADC read;ADC voltage (mV)");
-  for (float j = c_max; j >= c_min; j = j - 1) {
-    dacWrite(CANAL_DAC0, j);
-    digitalWrite(light_alarm, HIGH);
-    delay(200);
-    digitalWrite(light_alarm, LOW);
-    input = analogRead(readpin); //tensão ADC
-    Serial.print(j);
-    Serial.print(";");
-    Serial.print(map(j, 0, 255, 0, 3300));
-    Serial.print(";");
-    Serial.print(input);
-    Serial.print(";");
-    Serial.println(map(input, 0, 4095, 0, 3300));
-    delay (5000);
-  }
+ Serial.println("Cycle;DAC write;ADC read;DAC voltage (mV);ADC voltage (mV)");
+cycle = 1;
+  scan_pt(); // Ciclo 1  
+cycle = 2;
+  scan_pt(); // Ciclo 2  
+cycle = 3;
+  scan_pt(); // Ciclo 3  
+cycle = 4;
+  scan_pt(); // Ciclo 4
 
-  for (float j = c_min; j <= c_max; j = j + 1) {
-    dacWrite(CANAL_DAC0, j);
+  for (int i = 0; i < 4; i++) {
     digitalWrite(light_alarm, HIGH);
+    digitalWrite(sound_alarm, HIGH);
     delay(200);
     digitalWrite(light_alarm, LOW);
-    input = analogRead(readpin); //tensão ADC
-    Serial.print(j);
-    Serial.print(";");
-    Serial.print(map(j, 0, 255, 0, 3300));
-    Serial.print(";");
-    Serial.print(input);
-    Serial.print(";");
-    Serial.println(map(input, 0, 4095, 0, 3300));
-    delay (1000);
+    digitalWrite(sound_alarm, LOW);
+    delay(200);
   }
 
 }
 
 void loop() {
 
+}
+
+void scan_pt() {
+ 
+  for (float j = c_max; j >= c_min; j = j - 1) {
+    dacWrite(CANAL_DAC0, j);
+    digitalWrite(light_alarm, HIGH);
+    delay(200);
+    digitalWrite(light_alarm, LOW);
+    input = analogRead(readpin); //tensão ADC
+    Serial.print(cycle);
+    Serial.print(";");
+    Serial.print(j);
+    Serial.print(";");
+    Serial.print(input);
+    Serial.print(";");
+    Serial.print(map(j, 0, 255, 0, 3300));
+    Serial.print(";");
+    Serial.println(map(input, 0, 4095, 0, 3300));
+    delay (1000);
+  }
+
+   for (float j = c_min; j <= c_max; j = j + 1) {
+    dacWrite(CANAL_DAC0, j);
+    digitalWrite(light_alarm, HIGH);
+    delay(200);
+    digitalWrite(light_alarm, LOW);
+    input = analogRead(readpin); //tensão ADC
+    Serial.print(cycle);
+    Serial.print(";");
+    Serial.print(j);
+    Serial.print(";");
+    Serial.print(input);
+    Serial.print(";");
+    Serial.print(map(j, 0, 255, 0, 3300));
+    Serial.print(";");
+    Serial.println(map(input, 0, 4095, 0, 3300));
+    delay (1000);
+  }
+
+  for (int i = 0; i < 2; i++) {
+    digitalWrite(light_alarm, HIGH);
+    digitalWrite(sound_alarm, HIGH);
+    delay(200);
+    digitalWrite(light_alarm, LOW);
+    digitalWrite(sound_alarm, LOW);
+    delay(200);
+  }
 }
