@@ -1,49 +1,77 @@
-// ICC - Potenciostato portatil
+// ICC - Portable potentiostat
+#include <WiFi.h>
+#include <WebServer.h>
+#include <SPIFFS.h>
 
 float input = 0;
+float cell_v = 0;
+float we_a = 0;
 int light_alarm = 32;
 int sound_alarm = 33;
-int readpin = 34;
-int c_max = 181;
-int c_min = 54;
-int cycle = 0;
+int read_pin = 34; //Range of 0 (0V) and 4095 (3.3V)
+int avg_calc = 0;
+int c_max = 255;
+int c_min = 0;
+int scan_number = 1;
+int progress = 0;
+int count = 0;
+int i = 0;
+int j = 0;
+int k = 0;
+int time_start = 0;
+int sweep = 1000; //10mV/s --> 1000ms, 20mV/s --> 500ms, 30mV/s --> 333, 40mV/s --> 250ms...
+int scan_rate = 10; //mV/s
+int avg_num = 20;
+bool light = LOW;
+bool listDir();
+char* device_status = "Standby";
+int process = 0; //0 -- Ready, 1 -- Setup, 2 -- CV running, 3 -- EIS running, 4 -- Download
 
-#define CANAL_DAC0 25 //Definição do canal DAC0 (GPIO 25) output
-#define CANAL_DAC1 26 //Definição do canal DAC1 (GPIO 26) input
+#define CANAL_DAC0 25 //Channel definition DAC0 (GPIO 25) output (range of 0 and 255)
+//#define CANAL_DAC1 26 //Channel definition DAC1 (GPIO 26) output (range of 0 and 255)
+
+IPAddress local_ip(192, 168, 1, 1); //IP Address details
+IPAddress gateway(192, 168, 1, 1);
+IPAddress subnet(255, 255, 255, 0);
+WebServer server(80); //Declare object of WebServer library
 
 void setup() {
   Serial.begin(115200);
   pinMode(light_alarm, OUTPUT);
   pinMode(sound_alarm, OUTPUT);
-
-  for (int i = 0; i < 4; i++) {
-    digitalWrite(light_alarm, HIGH);
-    digitalWrite(sound_alarm, HIGH);
-    delay(200);
-    digitalWrite(light_alarm, LOW);
-    digitalWrite(sound_alarm, LOW);
-    delay(200);
-  }
-
-  Serial.println("Calibrando...");
+  device_status = "Device starting";
+  Serial.println("Device starting...");
   digitalWrite(light_alarm, HIGH);
   dacWrite(CANAL_DAC0, c_max);
-  dacWrite(CANAL_DAC1, 0);
+  WiFi.softAP("ICC Potentiostat v01", "test2023");
+  WiFi.softAPConfig(local_ip, gateway, subnet);
   delay(4600);
   digitalWrite(light_alarm, LOW);
   delay(400);
 
- Serial.println("Cycle;DAC write;ADC read;DAC voltage (mV);ADC voltage (mV)");
-cycle = 1;
-  scan_pt(); // Ciclo 1  
-cycle = 2;
-  scan_pt(); // Ciclo 2  
-cycle = 3;
-  scan_pt(); // Ciclo 3  
-cycle = 4;
-  scan_pt(); // Ciclo 4
+  server.on("/", handle_connect);
+  server.on("/p0", handle_p0);
+  server.on("/p1", handle_p1);
+  server.on("/p2", handle_p2);
+  server.on("/p3", handle_p3);
+  server.on("/p4", handle_p4);
+  server.on("/cv_sr_less", cv_sr_less);
+  server.on("/cv_sr_more", cv_sr_more);
+  server.on("/cv_sn_less", cv_sn_less);
+  server.on("/cv_sn_more", cv_sn_more);
 
-  for (int i = 0; i < 4; i++) {
+  server.onNotFound(handle_notfound);
+  server.begin();
+  Serial.println("HTTP server started...");
+
+  // SPIFFS routines
+  if (!SPIFFS.begin(true)) {
+    Serial.println("An Error has occurred while mounting SPIFFS");
+    return;
+  }
+  listDir();
+
+  for (i = 0; i < 4; i++) { //Device ready
     digitalWrite(light_alarm, HIGH);
     digitalWrite(sound_alarm, HIGH);
     delay(200);
@@ -51,57 +79,364 @@ cycle = 4;
     digitalWrite(sound_alarm, LOW);
     delay(200);
   }
-
+  device_status = "Device ready";
+  Serial.println("Device ready...");
 }
 
 void loop() {
+  server.handleClient();
+  if (process == 2) {
 
+    for (i = 0; i < 2; i++) { //CV running
+      digitalWrite(light_alarm, HIGH);
+      digitalWrite(sound_alarm, HIGH);
+      delay(200);
+      digitalWrite(light_alarm, LOW);
+      digitalWrite(sound_alarm, LOW);
+      delay(200);
+    }
+    device_status = "CV running";
+    Serial.println("CV running...");
+
+    scan();
+
+    progress = 0;
+    process = 0;
+
+    for (i = 0; i < 2; i++) { //Device ready
+      digitalWrite(light_alarm, HIGH);
+      digitalWrite(sound_alarm, HIGH);
+      delay(200);
+      digitalWrite(light_alarm, LOW);
+      digitalWrite(sound_alarm, LOW);
+      delay(200);
+    }
+    device_status = "Device ready";
+    Serial.println("Device ready...");
+  }
 }
 
-void scan_pt() {
- 
-  for (float j = c_max; j >= c_min; j = j - 1) {
-    dacWrite(CANAL_DAC0, j);
-    digitalWrite(light_alarm, HIGH);
-    delay(200);
-    digitalWrite(light_alarm, LOW);
-    input = analogRead(readpin); //tensão ADC
-    Serial.print(cycle);
-    Serial.print(";");
-    Serial.print(j);
-    Serial.print(";");
-    Serial.print(input);
-    Serial.print(";");
-    Serial.print(map(j, 0, 255, 0, 3300));
-    Serial.print(";");
-    Serial.println(map(input, 0, 4095, 0, 3300));
-    delay (1000);
+void scan() { //CV scan routine
+  time_start = millis();
+  sweep = 1000 / (scan_rate / 10);
+  count = 0;
+
+  File file = SPIFFS.open("/test.txt", "w"); //rotina para escrita em documento
+  if (!file) {
+    Serial.println("There was an error opening the file for writing");
+    return;
   }
 
-   for (float j = c_min; j <= c_max; j = j + 1) {
-    dacWrite(CANAL_DAC0, j);
-    digitalWrite(light_alarm, HIGH);
-    delay(200);
-    digitalWrite(light_alarm, LOW);
-    input = analogRead(readpin); //tensão ADC
-    Serial.print(cycle);
-    Serial.print(";");
-    Serial.print(j);
-    Serial.print(";");
-    Serial.print(input);
-    Serial.print(";");
-    Serial.print(map(j, 0, 255, 0, 3300));
-    Serial.print(";");
-    Serial.println(map(input, 0, 4095, 0, 3300));
-    delay (1000);
+  Serial.println("Time (ms);Progress (%);Scan number;DAC write;ADC read;Cell voltage (V);WE current (uA)");
+  file.println("Time (ms);Progress (%);Scan number;DAC write;ADC read;Cell voltage (V);WE current (uA)");
+
+  for (k = 0; k < scan_number; k++) { //Start single scan
+    light = LOW;
+    for (j = c_max; j >= c_min && process == 2; j = j - 1) {
+      dacWrite(CANAL_DAC0, j);
+      if (light)  {
+        light = LOW;
+        digitalWrite(light_alarm, LOW);
+      }
+      else  {
+        light = HIGH;
+        digitalWrite(light_alarm, HIGH);
+      }
+      delay (sweep);
+
+      input = 0;
+      for (i = 0; i < avg_num; i = i + 1) {
+        input = input + analogRead(read_pin);
+      }
+      input = input / avg_num;
+      cell_v = j * -0.0111 + 1.4;
+      we_a = input * -0.145 + 293;
+      count++;
+      progress = 100 * count / (scan_number * 2 * (c_max - c_min));
+
+      Serial.print(millis() - time_start);
+      file.print(millis() - time_start);
+      Serial.print(";");
+      file.print(";");
+      Serial.print(progress);
+      file.print(progress);
+      Serial.print(";");
+      file.print(";");
+      Serial.print(k + 1);
+      file.print(k + 1);
+      Serial.print(";");
+      file.print(";");
+      Serial.print(j);
+      file.print(j);
+      Serial.print(";");
+      file.print(";");
+      Serial.print(input);
+      file.print(input);
+      Serial.print(";");
+      file.print(";");
+      Serial.print(cell_v);
+      file.print(cell_v);
+      Serial.print(";");
+      file.print(";");
+      Serial.println(we_a);
+      file.println(we_a);
+      server.handleClient();
+    }
+
+    for (j = c_min; j <= c_max && process == 2; j = j + 1) {
+      dacWrite(CANAL_DAC0, j);
+      if (light)  {
+        light = LOW;
+        digitalWrite(light_alarm, LOW);
+      }
+      else  {
+        light = HIGH;
+        digitalWrite(light_alarm, HIGH);
+      }
+      delay (sweep);
+
+      input = 0;
+      for (i = 0; i < avg_num; i = i + 1) {
+        input = input + analogRead(read_pin);
+      }
+      input = input / avg_num;
+      cell_v = j * -0.0111 + 1.4;
+      we_a = input * -0.145 + 293;
+      count++;
+      progress = 100 * count / (scan_number * 2 * (c_max - c_min));
+
+      Serial.print(millis() - time_start);
+      file.print(millis() - time_start);
+      Serial.print(";");
+      file.print(";");
+      Serial.print(progress);
+      file.print(progress);
+      Serial.print(";");
+      file.print(";");
+      Serial.print(k + 1);
+      file.print(k + 1);
+      Serial.print(";");
+      file.print(";");
+      Serial.print(j);
+      file.print(j);
+      Serial.print(";");
+      file.print(";");
+      Serial.print(input);
+      file.print(input);
+      Serial.print(";");
+      file.print(";");
+      Serial.print(cell_v);
+      file.print(cell_v);
+      Serial.print(";");
+      file.print(";");
+      Serial.println(we_a);
+      file.println(we_a);
+      server.handleClient();
+    }
+    for (i = 0; i < 2; i++) { //Stop single scan
+      digitalWrite(light_alarm, HIGH);
+      digitalWrite(sound_alarm, HIGH);
+      delay(200);
+      digitalWrite(light_alarm, LOW);
+      digitalWrite(sound_alarm, LOW);
+      delay(200);
+    }
+  }
+  file.close(); //fim da rotina de escrita
+}
+
+void server_send() {
+  server.send(200, "text/html", SendHTML(process, device_status, millis() / 1000, progress, k + 1, cell_v, we_a, scan_rate, scan_number));
+}
+
+void handle_connect() {
+  server_send();
+}
+
+void handle_p0() {
+  process = 0;
+  server_send();
+}
+
+void handle_p1() {
+  process = 1;
+  server_send();
+}
+
+void handle_p2() {
+  process = 2;
+  server_send();
+}
+
+void handle_p3() {
+  process = 3;
+  server_send();
+}
+
+void handle_p4() {
+  File download = SPIFFS.open("/test.txt", "r");
+  if (download) {
+    server.sendHeader("Content-Type", "text/text");
+    server.sendHeader("Content-Disposition", "attachment; filename=test.txt");
+    server.sendHeader("Connection", "close");
+    server.streamFile(download, "application/octet-stream");
+    download.close();
+  }
+}
+
+void cv_sr_less() {
+  if (scan_rate > 10) {
+    scan_rate = scan_rate - 10;
+  } server_send();
+}
+
+void cv_sr_more() {
+  if (scan_rate < 100) {
+    scan_rate = scan_rate + 10;
+  } server_send();
+}
+
+void cv_sn_less() {
+  if (scan_number > 1) {
+    scan_number--;
+  } server_send();
+}
+
+void cv_sn_more() {
+  if (scan_number < 10) {
+    scan_number++;
+  } server_send();
+}
+
+void handle_notfound() {
+  server.send(404, "text/plain", "Not found");
+}
+
+String SendHTML(int proc_stat, char dev_stat[], int time_stat, int prog_stat, int scan_stat, float dac_stat, float adc_stat, int scan_r_stat, int scan_n_stat) {
+  String ptr = "<!DOCTYPE html> <html>";
+  ptr += "<head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, user-scalable=no\">";
+  ptr += "<title>Potenciostat control</title>";
+  ptr += "<style>html { font-family: Helvetica; display: inline-block; margin: 0px auto; text-align: center;}";
+  ptr += "body{margin-top: 50px;} h1 {color: #444444;margin: 30px;} h2 {color: #444444;margin: 30px;}";
+  ptr += ".button {display: block;width: 120px;background-color: #3498db;border: none;color: white;padding: 10px 30px;text-decoration: none;font-size: 18px;margin: 0px auto 36px;cursor: pointer;border-radius: 4px;}";
+  ptr += ".button-on {background-color: #3498db;}";
+  ptr += ".button-on:active {background-color: #2980b9;}";
+  ptr += ".button-off {background-color: #34495e;}";
+  ptr += ".button-off:active {background-color: #2c3e50;}";
+  ptr += "p{font-size: 14px;color: #888;margin: 20px;}";
+  ptr += "table.center {margin-left: auto;margin-right: auto;}";
+  ptr += "</style>";
+  
+  ptr += "<script>";
+  ptr += "setInterval(loadDoc,1000);";
+  ptr += "function loadDoc() {";
+  ptr += "var xhttp = new XMLHttpRequest();";
+  ptr += "xhttp.onreadystatechange = function() {";
+  ptr += "if (this.readyState == 4 && this.status == 200) {";
+  ptr += "document.body.innerHTML =this.responseText}";
+  ptr += "};";
+  ptr += "xhttp.open(\"GET\", \"/\", true);";
+  ptr += "xhttp.send();";
+  ptr += "}";
+  ptr += "</script>";
+
+  ptr += "</head>";
+  ptr += "<body>";
+  ptr += "<h1>ICC - Portable potentiostat</h1>";
+  ptr += "<p>Version v01</p>";
+  ptr += "<p>System time: ";
+  ptr += time_stat;
+  ptr += "s / Device status: ";
+  ptr += dev_stat;
+  ptr += "</p>";
+
+  if (proc_stat == 1)  {
+    ptr += "<a class=\"button button-off\" href=\"/p0\">Return</a>";
+    ptr += "<p>CV scan rate: ";
+    ptr += scan_r_stat;
+    ptr += " mV/s</p>";
+    ptr += "<table class=\"center\">";
+    ptr += "<tr>";
+    ptr += "<td><a class=\"button button-on\" href=\"/cv_sr_less\">(-) CV scan rate</a></td>";
+    ptr += "<td><a class=\"button button-on\" href=\"/cv_sr_more\">(+) CV scan rate</a></td>";
+    ptr += "</tr>";
+    ptr += "</table>";
+    ptr += "<p>CV scan number: ";
+    ptr += scan_n_stat;
+    ptr += " scan</p>";
+    ptr += "<table class=\"center\">";
+    ptr += "<tr>";
+    ptr += "<td><a class=\"button button-on\" href=\"/cv_sn_less\">(-) CV scan number</a></td>";
+    ptr += "<td><a class=\"button button-on\" href=\"/cv_sn_more\">(+) CV scan number</a></td>";
+    ptr += "</tr>";
+    ptr += "</table>";
+
+    ptr += "<p>CV scan potential: ";
+    ptr += "-1,5";
+    ptr += " - ";
+    ptr += "1,5";
+    ptr += " V</p>";
+    ptr += "<table class=\"center\">";
+    ptr += "<tr>";
+    ptr += "<td><a class=\"button button-on\">(-) CV min voltage</a></td>";
+    ptr += "<td><a class=\"button button-on\">(+) CV min voltage</a></td>";
+    ptr += "</tr>";
+    ptr += "<tr>";
+    ptr += "<td><a class=\"button button-on\">(-) CV max voltage</a></td>";
+    ptr += "<td><a class=\"button button-on\">(+) CV max voltage</a></td>";
+    ptr += "</tr>";
+    ptr += "</table>";
+  }
+  else {
+    if (proc_stat == 2)  {
+      ptr += "<h2>Analysis</h2>";
+      ptr += "<a class=\"button button-on\" href=\"/p0\">CV stop</a>";
+      ptr += "<p>Progress: ";
+      ptr += prog_stat;
+      ptr += "% / Scan number: ";
+      ptr += scan_stat;
+      ptr += "°</p>";
+      ptr += "<p>Cell voltage: ";
+      ptr += dac_stat;
+      ptr += "V / WE current: ";
+      ptr += adc_stat;
+      ptr += "uA</p>";
+    }
+    else  {
+      ptr += "<a class=\"button button-off\" href=\"/p1\">Setup</a>";
+      ptr += "<h2>Analysis</h2>";
+      ptr += "<a class=\"button button-off\" href=\"/p2\">CV Start</a>";
+      ptr += "<a class=\"button button-off\" href=\"/p4\">Results</a>";
+    }
   }
 
-  for (int i = 0; i < 2; i++) {
-    digitalWrite(light_alarm, HIGH);
-    digitalWrite(sound_alarm, HIGH);
-    delay(200);
-    digitalWrite(light_alarm, LOW);
-    digitalWrite(sound_alarm, LOW);
-    delay(200);
+  ptr += "</body>";
+  ptr += "</html>";
+  return ptr;
+}
+
+bool listDir() {
+  File root = SPIFFS.open("/"); // Abre o "diretório" onde estão os arquivos na SPIFFS e passa o retorno para uma variável do tipo File.
+  if (!root) {// Se houver falha ao abrir o "diretório", ...    // informa ao usuário que houve falhas e sai da função retornando false.
+    Serial.println(" - falha ao abrir o diretório");
+    return false;
   }
+  File file = root.openNextFile(); // Relata o próximo arquivo do "diretório" e passa o retorno para a variável do tipo File.
+  int qtdFiles = 0; // variável que armazena a quantidade de arquivos que há no diretório informado.
+  while (file) { // Enquanto houver arquivos no "diretório" que não foram vistos, executa o laço de repetição.
+    Serial.print("FILE: ");
+    Serial.print(file.name()); // Imprime o nome do arquivo
+    Serial.print("\tSIZE: ");
+    Serial.println(file.size()); // Imprime o tamanho do arquivo
+    qtdFiles++; // Incrementa a variável de quantidade de arquivos
+    file = root.openNextFile(); // Relata o próximo arquivo do diretório e passa o retorno para a variável do tipo File.
+  }
+  if (qtdFiles == 0)  // Se após a visualização de todos os arquivos do diretório não houver algum arquivo, ...
+  {
+    // Avisa o usuário que não houve nenhum arquivo para ler e retorna false.
+    Serial.print(" - Sem arquivos para ler. Crie novos arquivos pelo menu ");
+    Serial.println("principal, opção 2.");
+    return false;
+  }
+  return true; // retorna true se não houver nenhum erro
 }
