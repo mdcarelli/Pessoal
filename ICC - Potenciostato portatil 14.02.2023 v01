@@ -1,4 +1,4 @@
-// ICC - Portable potentiostat
+// ICC - Portable potentiostat 04.02.2024 v01
 #include <WiFi.h>
 #include <WebServer.h>
 #include <SPIFFS.h>
